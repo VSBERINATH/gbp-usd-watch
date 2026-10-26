@@ -16,10 +16,11 @@ const today = all.at(-1), min = Math.min(...all), max = Math.max(...all);
 const avg3 = avg(v3), avg6 = avg(all), pos = (today - min) / (max - min);
 
 let msg = null;
-if (pos <= 0.25 && today < avg3 && today < avg6) msg = 'GOOD TIME: convert USD loan money to GBP';
-if (pos >= 0.75 && today > avg3 && today > avg6) msg = 'GOOD TIME: pay back your USD loan';
+if (pos <= 0.25 && today < avg3 && today < avg6) msg = 'BEST TIME NOW: convert USD loan money to GBP (you get more GBP per USD than usual)';
+if (pos >= 0.75 && today > avg3 && today > avg6) msg = 'BEST TIME NOW: pay back your USD loan (you get more USD per GBP than usual)';
 
-const line = `GBP/USD ${today.toFixed(4)} | 3m avg ${avg3.toFixed(4)} | 6m avg ${avg6.toFixed(4)} | range pos ${Math.round(pos * 100)}%`;
+let line = `GBP/USD ${today.toFixed(4)} | 3m avg ${avg3.toFixed(4)} | 6m avg ${avg6.toFixed(4)} | range pos ${Math.round(pos * 100)}%`;
+if (msg || process.env.FORCE_TEST === 'true') { const conv = msg ? msg.includes('convert') : true; const A = 100; const now = conv ? A / today : A * today; const av = conv ? A / avg6 : A * avg6; const best = conv ? A / min : A * max; const u = conv ? 'GBP' : 'USD', i = conv ? 'USD' : 'GBP'; line = (msg ? 'Best time now! ' : 'Example: ') + A + ' ' + i + ' gets you ' + now.toFixed(2) + ' ' + u + ' today. Average over 6 months: ' + av.toFixed(2) + ' ' + u + '. Best in 6 months: ' + best.toFixed(2) + ' ' + u + '. | ' + line; }
 console.log(line, '->', msg || 'no signal');
 
 if (msg && topic) {
