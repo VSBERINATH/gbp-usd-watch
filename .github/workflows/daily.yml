@@ -1,0 +1,16 @@
+name: Daily GBP USD check
+on:
+  schedule:
+    - cron: "30 8 * * 1-5"   # 08:30 UTC, weekdays
+  workflow_dispatch: {}       # lets you run it by hand to test
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/check.mjs
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
