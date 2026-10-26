@@ -23,6 +23,7 @@ jobs:
         run: node scripts/check.mjs
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          FORCE_TEST: ${{ inputs.test }}
       - name: Open alert issue (GitHub emails you)
         if: steps.check.outputs.signal != '' || inputs.test == true
         env:
