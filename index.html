@@ -38,6 +38,7 @@ input[type=number]{width:110px;padding:6px 8px;font:inherit;border:1px solid var
       <button id="m-convert" class="on">Convert USD to GBP</button><button id="m-repay">Pay back loan (GBP to USD)</button>
     </div>
     <label for="amt">Amount <input type="number" id="amt" min="1" step="1" value="100"> <span id="unitIn">USD</span></label>
+    <label for="per">Compare last <input type="number" id="per" min="1" max="60" step="1" value="6"> <select id="unit"><option value="1">months</option><option value="12">years</option></select></label>
   </div>
   <div class="card">
     <div id="verdict" class="verdict">Loading rates...</div>
@@ -47,7 +48,7 @@ input[type=number]{width:110px;padding:6px 8px;font:inherit;border:1px solid var
   <div class="card">
     <div id="ctitle"></div>
     <div class="wrap" id="wrap"><svg id="chart" viewBox="0 0 700 260" role="img" aria-label="Value of your amount over the last 6 months"></svg><div class="tip" id="tip" hidden></div></div>
-    <small>Move your mouse or finger over the chart to see any day. Higher line = better for you. Dashed lines: 3-month (purple) and 6-month (orange) average.</small>
+    <small>Move your mouse or finger over the chart to see any day. Higher line = better for you. Dashed lines: recent average (purple) and full-period average (orange).</small>
   </div>
   <div class="card stats" id="stats"></div>
   <small>Data: Frankfurter (European Central Bank rates). Not financial advice.</small>
@@ -56,14 +57,17 @@ input[type=number]{width:110px;padding:6px 8px;font:inherit;border:1px solid var
 const $ = id => document.getElementById(id);
 let mode = localStorage.getItem('mode') || 'convert', S = null, G = null;
 let amt = Number(localStorage.getItem('amt')) || 100;
+let per = Number(localStorage.getItem('per')) || 6, uni = Number(localStorage.getItem('uni')) || 1;
+const months = () => Math.min(60, Math.max(1, per * uni));
+const recentM = () => Math.max(1, Math.round(months() / 2));
 const unitIn = () => mode === 'convert' ? 'USD' : 'GBP';
 const unitOut = () => mode === 'convert' ? 'GBP' : 'USD';
 const val = r => mode === 'convert' ? amt / r : amt * r;
 const fmt = n => n.toLocaleString('en-GB', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
-function stats(rows){
+function stats(rows, rm){
   const v = rows.map(r => r[1]), avg = a => a.reduce((x,y)=>x+y,0)/a.length;
-  const cut = new Date(); cut.setMonth(cut.getMonth()-3);
+  const cut = new Date(); cut.setMonth(cut.getMonth()-rm);
   const v3 = rows.filter(r => new Date(r[0]) >= cut).map(r => r[1]);
   const today = v[v.length-1], min = Math.min(...v), max = Math.max(...v);
   return {today, avg3: avg(v3), avg6: avg(v), min, max, pos: (today-min)/(max-min)};
@@ -72,11 +76,11 @@ function verdict(s, m){
   if(m === 'convert'){
     const ok = s.pos <= .25 && s.today < s.avg3 && s.today < s.avg6;
     return {ok, text: ok ? 'Good time to convert USD to GBP' : 'Not a special time. Wait.',
-      why: ok ? 'You get more pounds than usual: top 25% of 6 months and above both averages.' : 'Wait until you get more pounds per dollar: top 25% of 6 months and above both averages.'};
+      why: ok ? 'You get more pounds than usual: top 25% of the period and above both averages.' : 'Wait until you get more pounds per dollar: top 25% of the period and above both averages.'};
   }
   const ok = s.pos >= .75 && s.today > s.avg3 && s.today > s.avg6;
   return {ok, text: ok ? 'Good time to pay back your loan' : 'Not a special time. Wait.',
-    why: ok ? 'You get more dollars than usual: top 25% of 6 months and above both averages.' : 'Wait until you get more dollars per pound: top 25% of 6 months and above both averages.'};
+    why: ok ? 'You get more dollars than usual: top 25% of the period and above both averages.' : 'Wait until you get more dollars per pound: top 25% of the period and above both averages.'};
 }
 function render(){
   if(!S) return;
@@ -88,8 +92,8 @@ function render(){
   const vals = S.rows.map(r => val(r[1])), best = Math.max(...vals), worst = Math.min(...vals);
   const score = Math.round((mode === 'convert' ? 1 - s.pos : s.pos) * 100);
   const c = n => fmt(n) + ' ' + out;
-  $('stats').innerHTML = [['Today', c(val(s.today))],['3-month average', c(val(s.avg3))],['6-month average', c(val(s.avg6))],
-    ['6-month best', c(best)],['6-month worst', c(worst)],['Score today', score + '% (100% = best)']]
+  $('stats').innerHTML = [['Today', c(val(s.today))],['Recent average (' + S.rm + ' mo)', c(val(s.avg3))],['Average (' + S.mo + ' mo)', c(val(s.avg6))],
+    ['Best in period', c(best)],['Worst in period', c(worst)],['Score today', score + '% (100% = best)']]
     .map(x => '<div><span>'+x[0]+'</span><b>'+x[1]+'</b></div>').join('');
   $('ctitle').textContent = fmt(amt) + ' ' + unitIn() + ' gets you this many ' + out + ', day by day';
   draw();
@@ -140,13 +144,13 @@ function pick(e){
   show(Math.max(0, Math.min(G.n - 1, i)));
 }
 async function load(){
-  const end = new Date(), start = new Date(); start.setMonth(start.getMonth()-6);
+  const end = new Date(), start = new Date(); start.setMonth(start.getMonth()-months());
   const d = x => x.toISOString().slice(0,10);
   try{
     const res = await fetch('https://api.frankfurter.dev/v1/'+d(start)+'..'+d(end)+'?base=GBP&symbols=USD');
     const j = await res.json();
     const rows = Object.entries(j.rates).map(([k,v]) => [k, v.USD]).sort();
-    S = {rows, s: stats(rows)}; render();
+    S = {rows, s: stats(rows, recentM()), mo: months(), rm: recentM()}; render();
   }catch(e){ $('verdict').textContent = 'Could not load rates. Refresh the page.'; }
 }
 $('amt').value = amt;
@@ -157,6 +161,10 @@ $('notify').onchange = async e => { if(e.target.checked && 'Notification' in win
 $('chart').addEventListener('pointermove', pick);
 $('chart').addEventListener('pointerdown', pick);
 $('chart').addEventListener('pointerleave', () => { if(G) show(G.n-1); });
+$('per').value = per; $('unit').value = uni;
+let tm;
+const chg = () => { const n = Number($('per').value); if(n > 0){ per = n; uni = Number($('unit').value); localStorage.setItem('per', per); localStorage.setItem('uni', uni); clearTimeout(tm); tm = setTimeout(load, 400); } };
+$('per').oninput = chg; $('unit').onchange = chg;
 load(); setInterval(load, 3600000);
 </script>
 </body>
