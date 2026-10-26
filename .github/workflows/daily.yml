@@ -2,7 +2,15 @@ name: Daily GBP USD check
 on:
   schedule:
     - cron: "30 8 * * 1-5"   # 08:30 UTC, weekdays
-  workflow_dispatch: {}       # lets you run it by hand to test
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Test: open a test alert issue even if there is no signal"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  issues: write
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -11,6 +19,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: node scripts/check.mjs
+      - id: check
+        run: node scripts/check.mjs
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      - name: Open alert issue (GitHub emails you)
+        if: steps.check.outputs.signal != '' || inputs.test == true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNAL: ${{ steps.check.outputs.signal }}
+          LINE: ${{ steps.check.outputs.line }}
+        run: |
+          TITLE="${SIGNAL:-TEST alert, no real signal}"
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$LINE"
