@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GBP USD Watch</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#14202b;--mut:#5d6b78;--line:#dfe4ea;--good:#0a7d4f;--acc:#1c4e80}
+@media (prefers-color-scheme:dark){:root{--bg:#0f161d;--card:#18222c;--fg:#e8eef4;--mut:#93a2b0;--line:#2a3743;--good:#4cc38a;--acc:#7db4e6}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif;padding:20px 16px}
+main{max-width:720px;margin:0 auto;display:grid;gap:16px}
+h1{font-size:1.4rem;margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.row{display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between;align-items:center}
+.mode button{border:1px solid var(--line);background:none;color:var(--fg);padding:8px 14px;cursor:pointer;font:inherit}
+.mode button:first-child{border-radius:8px 0 0 8px}.mode button:last-child{border-radius:0 8px 8px 0}
+.mode button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.verdict{font-size:1.25rem;font-weight:700}
+.good{color:var(--good)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+.stats div span{display:block;color:var(--mut);font-size:.8rem;text-transform:uppercase;letter-spacing:.05em}
+.stats b{font-variant-numeric:tabular-nums;font-size:1.1rem}
+svg{width:100%;height:auto;display:block}
+small{color:var(--mut)}
+label{display:flex;gap:8px;align-items:center;cursor:pointer}
+</style>
+</head>
+<body>
+<main>
+  <h1>GBP USD Watch</h1>
+  <div class="card row">
+    <div class="mode" role="group" aria-label="Mode">
+      <button id="m-convert" class="on">Convert USD to GBP</button><button id="m-repay">Pay back loan</button>
+    </div>
+    <label><input type="checkbox" id="notify"> Alert me when this page is open</label>
+  </div>
+  <div class="card">
+    <div id="verdict" class="verdict">Loading rates...</div>
+    <small id="why"></small>
+  </div>
+  <div class="card stats" id="stats"></div>
+  <div class="card"><svg id="chart" viewBox="0 0 700 260" role="img" aria-label="GBP/USD last 6 months"></svg>
+    <small>Blue line: rate. Dashed: 3-month and 6-month average. Rate = USD for 1 GBP.</small></div>
+  <small>Data: Frankfurter (European Central Bank rates). Not financial advice.</small>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let mode = localStorage.getItem('mode') || 'convert', S = null;
+
+function stats(rows){
+  const v = rows.map(r => r[1]), avg = a => a.reduce((x,y)=>x+y,0)/a.length;
+  const cut = new Date(); cut.setMonth(cut.getMonth()-3);
+  const v3 = rows.filter(r => new Date(r[0]) >= cut).map(r => r[1]);
+  const today = v[v.length-1], min = Math.min(...v), max = Math.max(...v);
+  return {today, avg3: avg(v3), avg6: avg(v), min, max, pos: (today-min)/(max-min)};
+}
+function verdict(s, m){
+  if(m === 'convert'){
+    const ok = s.pos <= .25 && s.today < s.avg3 && s.today < s.avg6;
+    return {ok, text: ok ? 'Good time to convert USD to GBP' : 'Not a special time. Wait.',
+      why: ok ? 'The pound is cheap: bottom 25% of 6 months and below both averages.' : 'Wait for the pound to fall to the bottom 25% of its 6-month range.'};
+  }
+  const ok = s.pos >= .75 && s.today > s.avg3 && s.today > s.avg6;
+  return {ok, text: ok ? 'Good time to pay back your loan' : 'Not a special time. Wait.',
+    why: ok ? 'The pound is strong: top 25% of 6 months and above both averages.' : 'Wait for the pound to rise to the top 25% of its 6-month range.'};
+}
+function render(){
+  if(!S) return;
+  const v = verdict(S.s, mode);
+  $('verdict').textContent = v.text; $('verdict').className = 'verdict ' + (v.ok ? 'good' : '');
+  $('why').textContent = v.why;
+  $('m-convert').classList.toggle('on', mode==='convert'); $('m-repay').classList.toggle('on', mode==='repay');
+  const f = n => n.toFixed(4), s = S.s;
+  $('stats').innerHTML = [['Today',f(s.today)],['3-month avg',f(s.avg3)],['6-month avg',f(s.avg6)],
+    ['6-month low',f(s.min)],['6-month high',f(s.max)],['Range position',Math.round(s.pos*100)+'%']]
+    .map(x => '<div><span>'+x[0]+'</span><b>'+x[1]+'</b></div>').join('');
+  draw();
+  if($('notify').checked && v.ok && 'Notification' in window && Notification.permission === 'granted'){
+    const key = new Date().toDateString()+mode;
+    if(localStorage.getItem('last') !== key){ localStorage.setItem('last', key); new Notification('GBP/USD '+f(s.today), {body: v.text}); }
+  }
+}
+function draw(){
+  const r = S.rows, s = S.s, W=700, H=260, p=36;
+  const lo = s.min - .005, hi = s.max + .005;
+  const x = i => p + i*(W-2*p)/(r.length-1), y = v => H-p - (v-lo)/(hi-lo)*(H-2*p);
+  const pts = r.map((a,i)=>x(i).toFixed(1)+','+y(a[1]).toFixed(1)).join(' ');
+  const line = (v,c) => '<line x1="'+p+'" x2="'+(W-p)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="'+c+'" stroke-dasharray="5 4"/>';
+  $('chart').innerHTML =
+    '<text x="4" y="'+(y(s.max)+4)+'" font-size="11" fill="currentColor">'+s.max.toFixed(3)+'</text>'+
+    '<text x="4" y="'+(y(s.min)+4)+'" font-size="11" fill="currentColor">'+s.min.toFixed(3)+'</text>'+
+    line(s.avg6,'#d98a00')+line(s.avg3,'#8a5cd6')+
+    '<polyline fill="none" stroke="var(--acc)" stroke-width="2" points="'+pts+'"/>'+
+    '<circle cx="'+x(r.length-1)+'" cy="'+y(s.today)+'" r="4.5" fill="var(--acc)"/>'+
+    '<text x="'+p+'" y="'+(H-10)+'" font-size="11" fill="currentColor">'+r[0][0]+'</text>'+
+    '<text x="'+(W-p)+'" y="'+(H-10)+'" font-size="11" text-anchor="end" fill="currentColor">'+r[r.length-1][0]+'</text>';
+}
+async function load(){
+  const end = new Date(), start = new Date(); start.setMonth(start.getMonth()-6);
+  const d = x => x.toISOString().slice(0,10);
+  try{
+    const res = await fetch('https://api.frankfurter.dev/v1/'+d(start)+'..'+d(end)+'?base=GBP&symbols=USD');
+    const j = await res.json();
+    const rows = Object.entries(j.rates).map(([k,v]) => [k, v.USD]).sort();
+    S = {rows, s: stats(rows)}; render();
+  }catch(e){ $('verdict').textContent = 'Could not load rates. Refresh the page.'; }
+}
+$('m-convert').onclick = () => { mode='convert'; localStorage.setItem('mode',mode); render(); };
+$('m-repay').onclick = () => { mode='repay'; localStorage.setItem('mode',mode); render(); };
+$('notify').onchange = async e => { if(e.target.checked && 'Notification' in window) await Notification.requestPermission(); render(); };
+load(); setInterval(load, 3600000);
+</script>
+</body>
+</html>
