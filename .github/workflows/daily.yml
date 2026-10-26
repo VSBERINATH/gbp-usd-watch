@@ -31,4 +31,4 @@ jobs:
           LINE: ${{ steps.check.outputs.line }}
         run: |
           TITLE="${SIGNAL:-TEST alert, no real signal}"
-          gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$LINE"
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$LINE" --assignee "${{ github.repository_owner }}"
