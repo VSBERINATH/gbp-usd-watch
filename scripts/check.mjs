@@ -29,3 +29,6 @@ if (msg && topic) {
     body: `${msg}\n${line}`,
   });
 }
+
+import { appendFileSync } from 'node:fs';
+if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, 'signal=' + (msg || '') + '\nline=' + line + '\n');
